@@ -81,6 +81,30 @@ TASKLIST.md        # Gemensam todo-lista & API-önskelista
 
 ---
 
+## 🔑 Externa Resurser (för Build Agenter)
+
+Dessa resurser ska alltid vara tillgängliga för agenter:
+
+### GitHub
+| Resource | Info |
+|----------|------|
+| **Token** | Finns i `.env` som `GITHUB_TOKEN` |
+| **Scope** | `admin:enterprise, admin:org, repo, user, workflow` |
+| **EnergiRevision** | `https://github.com/finasteos/EnergiRevision` |
+
+### Gemini API
+- **Tier**: Paid Tier 1
+- **Rate Limits**: 300 RPM (Flash), 150 RPM (Pro), 1M TPM, 1500 RPD
+- **Models**: gemini-3-flash-preview, gemini-3.1-pro-preview
+
+### Environment Variables som agenter behöver
+```bash
+GEMINI_API_KEY=<your-key>
+GITHUB_TOKEN=<token-from-.env>
+```
+
+---
+
 ## The Glass Cathedral
 
 *"Scener behöver sin..." - Kimi*
