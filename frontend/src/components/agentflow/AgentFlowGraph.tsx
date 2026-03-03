@@ -11,6 +11,13 @@ import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo } from 'react';
 import { AgentNode } from './AgentNode';
 
+interface AgentTaskItem {
+  name: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
+  duration_ms?: number;
+  detail?: string;
+}
+
 interface AgentFlowGraphProps {
   agents: Array<{
     id: string;
@@ -18,6 +25,8 @@ interface AgentFlowGraphProps {
     state: string;
     confidence: number;
     lastThought?: string;
+    tasks?: AgentTaskItem[];
+    overallTaskStatus?: string;
   }>;
   connections: Array<{
     from: string;
@@ -47,64 +56,88 @@ export function AgentFlowGraph({ agents, connections, activeAgent }: AgentFlowGr
     {
       id: 'coordinator',
       type: 'agent',
-      position: { x: 400, y: 50 },
+      position: { x: 400, y: 30 },
       data: {
         name: 'Coordinator Alpha',
         role: 'orchestrator',
-        state: 'active'
+        state: 'active',
+        confidence: 1.0,
+        isActive: false
       }
     },
     // Analysis layer
     {
       id: 'context_weaver',
       type: 'agent',
-      position: { x: 200, y: 200 },
+      position: { x: 100, y: 200 },
       data: {
         name: 'Context Weaver',
         role: 'analysis',
-        state: 'idle'
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
       }
     },
     {
       id: 'echo_vault',
       type: 'agent',
-      position: { x: 600, y: 200 },
+      position: { x: 400, y: 200 },
       data: {
         name: 'Echo Vault',
         role: 'memory',
-        state: 'idle'
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
+      }
+    },
+    {
+      id: 'dispute_skeptic',
+      type: 'agent',
+      position: { x: 700, y: 200 },
+      data: {
+        name: 'Dispute Skeptic',
+        role: 'red team',
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
       }
     },
     // Reasoning layer
     {
       id: 'outcome_architect',
       type: 'agent',
-      position: { x: 400, y: 350 },
+      position: { x: 400, y: 380 },
       data: {
         name: 'Outcome Architect',
         role: 'strategy',
-        state: 'idle'
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
       }
     },
     // Output layer
     {
       id: 'chronicle_scribe',
       type: 'agent',
-      position: { x: 300, y: 500 },
+      position: { x: 250, y: 540 },
       data: {
         name: 'Chronicle Scribe',
         role: 'documentation',
-        state: 'idle'
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
       }
     },
     {
       id: 'pulse_monitor',
       type: 'agent',
-      position: { x: 500, y: 500 },
+      position: { x: 550, y: 540 },
       data: {
         name: 'Pulse Monitor',
         role: 'telemetry',
-        state: 'idle'
+        state: 'idle',
+        confidence: 1.0,
+        isActive: false
       }
     }
   ], []);
@@ -112,8 +145,10 @@ export function AgentFlowGraph({ agents, connections, activeAgent }: AgentFlowGr
   const initialEdges: Edge[] = useMemo(() => [
     { id: 'c-cw', source: 'coordinator', target: 'context_weaver', animated: false },
     { id: 'c-ev', source: 'coordinator', target: 'echo_vault', animated: false },
+    { id: 'c-ds', source: 'coordinator', target: 'dispute_skeptic', animated: false },
     { id: 'cw-oa', source: 'context_weaver', target: 'outcome_architect', animated: false },
     { id: 'ev-oa', source: 'echo_vault', target: 'outcome_architect', animated: false },
+    { id: 'ds-oa', source: 'dispute_skeptic', target: 'outcome_architect', animated: false },
     { id: 'oa-cs', source: 'outcome_architect', target: 'chronicle_scribe', animated: false },
     { id: 'oa-pm', source: 'outcome_architect', target: 'pulse_monitor', animated: false },
     { id: 'c-oa', source: 'coordinator', target: 'outcome_architect', animated: false, type: 'step' }
@@ -135,7 +170,9 @@ export function AgentFlowGraph({ agents, connections, activeAgent }: AgentFlowGr
               state: agentData.state,
               confidence: agentData.confidence,
               lastThought: agentData.lastThought,
-              isActive: activeAgent === node.id
+              isActive: activeAgent === node.id,
+              tasks: agentData.tasks,
+              overallTaskStatus: agentData.overallTaskStatus
             }
           };
         }

@@ -7,6 +7,7 @@ class MessageType(str, Enum):
     EVENT_LOG = "event_log"
     AGENT_THOUGHT = "agent_thought"
     CASE_COMPLETE = "case_complete"
+    AGENT_TASKS = "agent_tasks"
 
 class WebSocketMessage(BaseModel):
     type: MessageType
@@ -35,3 +36,19 @@ class AgentThoughtMessage(WebSocketMessage):
 
 class CaseUpdateMessage(WebSocketMessage):
     deliverables: Dict[str, Any]
+
+
+class AgentTaskItem(BaseModel):
+    """A single task within an agent's task list."""
+    name: str
+    status: str  # pending, running, done, error, skipped
+    duration_ms: Optional[float] = None
+    detail: Optional[str] = None
+
+
+class AgentTasksMessage(WebSocketMessage):
+    """Verbose task list for a specific agent node in React Flow."""
+    agent_id: str
+    agent_name: str
+    tasks: List[AgentTaskItem] = []
+    overall_status: str = "idle"  # idle, working, done, error

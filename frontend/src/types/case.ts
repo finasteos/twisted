@@ -17,6 +17,13 @@ export const CaseStatus = {
   ERROR: 'ERROR' as const
 };
 
+export interface AgentTaskItem {
+  name: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
+  duration_ms?: number;
+  detail?: string;
+}
+
 export interface AgentState {
   id: string;
   name: string;
@@ -24,6 +31,8 @@ export interface AgentState {
   state: string;
   confidence: number;
   lastThought?: string;
+  tasks?: AgentTaskItem[];
+  overallTaskStatus?: 'idle' | 'working' | 'done' | 'error';
 }
 
 export interface CaseDeliverables {
