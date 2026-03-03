@@ -1,6 +1,13 @@
 import { Handle, Position } from '@xyflow/react';
 import React from 'react';
 
+interface AgentTaskItem {
+  name: string;
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
+  duration_ms?: number;
+  detail?: string;
+}
+
 interface AgentNodeProps {
   data: {
     name: string;
@@ -9,21 +16,38 @@ interface AgentNodeProps {
     confidence: number;
     lastThought?: string;
     isActive: boolean;
+    tasks?: AgentTaskItem[];
+    overallTaskStatus?: string;
   };
 }
 
+function getTaskStatusIcon(status: string): string {
+  switch (status) {
+    case 'done': return '\u2713';
+    case 'running': return '\u25B6';
+    case 'error': return '\u2717';
+    case 'skipped': return '\u2014';
+    case 'pending':
+    default: return '\u25CB';
+  }
+}
+
+function getTaskStatusColor(status: string): string {
+  switch (status) {
+    case 'done': return 'text-green-400';
+    case 'running': return 'text-blue-400 animate-pulse';
+    case 'error': return 'text-red-400';
+    case 'skipped': return 'text-zinc-500';
+    case 'pending':
+    default: return 'text-zinc-600';
+  }
+}
+
 export const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
-  const getStatusColor = () => {
-    switch (data.state) {
-      case 'thinking': return 'text-blue-400';
-      case 'active': return 'text-green-400';
-      case 'error': return 'text-red-400';
-      default: return 'text-white/50';
-    }
-  };
+  const hasTasks = data.tasks && data.tasks.length > 0;
 
   return (
-    <div className={`agent-node glass-card p-4 min-w-[180px] transition-all duration-500 ${data.isActive ? 'isActive ring-2 ring-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]' : 'opacity-80'}`}>
+    <div className={`agent-node glass-card p-4 min-w-[200px] max-w-[280px] transition-all duration-500 ${data.isActive ? 'isActive ring-2 ring-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]' : 'opacity-80'}`}>
       <Handle type="target" position={Position.Top} className="!bg-white/20 !border-white/10" />
 
       <div className="agent-node-header flex justify-between items-center mb-2">
@@ -40,9 +64,31 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ data }) => {
         />
       </div>
 
-      {data.lastThought && (
+      {/* Verbose Task List */}
+      {hasTasks && (
+        <div className="task-list mt-2 space-y-1 max-h-[160px] overflow-y-auto border-t border-white/5 pt-2">
+          {data.tasks!.map((task, idx) => (
+            <div key={idx} className="flex items-start gap-1.5 text-[11px]">
+              <span className={`font-mono flex-shrink-0 ${getTaskStatusColor(task.status)}`}>
+                {getTaskStatusIcon(task.status)}
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className={`${task.status === 'done' ? 'text-white/40' : 'text-white/70'}`}>
+                  {task.name}
+                </span>
+                {task.detail && (
+                  <span className="text-white/30 ml-1 text-[9px]">({task.detail})</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Last Thought (only show if no tasks) */}
+      {!hasTasks && data.lastThought && (
         <div className="agent-thought text-[11px] leading-relaxed text-white/70 mt-3 border-t border-white/5 pt-2 animate-fade-in line-clamp-3">
-          "{data.lastThought}"
+          &quot;{data.lastThought}&quot;
         </div>
       )}
 

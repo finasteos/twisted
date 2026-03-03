@@ -5,10 +5,18 @@ Replaces ChromaDB for better cloud integration.
 
 import hashlib
 import time
+from collections import OrderedDict
 from typing import Dict, Any, List, Optional, Union
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from qdrant_client.http.exceptions import ResponseHandlingException
+
+from backend.logging_config import get_logger
+
+logger = get_logger("memory.qdrant")
+
+# Default max size for embedding LRU cache
+DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000
 
 
 class QdrantManager:
@@ -48,13 +56,15 @@ class QdrantManager:
         collection_name: str = "twisted_cases",
         embedding_model: str = "text-embedding-004",
         gemini_wrapper=None,
+        embedding_cache_max_size: int = DEFAULT_EMBEDDING_CACHE_MAX_SIZE,
     ):
         self.url = url
         self.api_key = api_key
         self.collection_name = collection_name
         self.embedding_model = embedding_model
         self.client: Optional[QdrantClient] = None
-        self.embedding_cache: Dict[str, List[float]] = {}
+        self._embedding_cache_max_size = embedding_cache_max_size
+        self.embedding_cache: OrderedDict[str, List[float]] = OrderedDict()
         self._gemini_wrapper = gemini_wrapper
 
     async def initialize(self):
@@ -94,7 +104,7 @@ class QdrantManager:
                     ),
                 )
         except Exception as e:
-            print(f"Warning: Could not ensure collection {collection_name}: {e}")
+            logger.warning(f"Could not ensure collection {collection_name}: {e}", operation="ensure_collection")
 
     async def close(self):
         """Cleanup."""
@@ -134,21 +144,40 @@ class QdrantManager:
         self._gemini_wrapper = wrapper
 
     async def _get_embedding(self, text: str) -> List[float]:
-        """Get embedding for text using the injected GeminiWrapper."""
+        """Get embedding for text using the injected GeminiWrapper. Uses LRU cache."""
         if text in self.embedding_cache:
+            # Move to end (most recently used)
+            self.embedding_cache.move_to_end(text)
             return self.embedding_cache[text]
 
         if self._gemini_wrapper:
             try:
                 embedding = await self._gemini_wrapper.get_embedding(text)
+                # LRU eviction: remove oldest if at capacity
+                if len(self.embedding_cache) >= self._embedding_cache_max_size:
+                    evicted_key, _ = self.embedding_cache.popitem(last=False)
+                    logger.debug(
+                        f"Evicted oldest embedding from cache (size={self._embedding_cache_max_size})",
+                        operation="cache_evict",
+                    )
                 self.embedding_cache[text] = embedding
                 return embedding
             except Exception as e:
-                print(f"Warning: Embedding failed: {e}")
+                logger.warning(f"Embedding failed: {e}", operation="get_embedding")
 
         # Fallback: return a zero vector (not ideal but prevents crashes)
-        print(f"Warning: No embedding available for text, using zero vector")
+        logger.warning("No embedding available for text, using zero vector", operation="get_embedding")
         return [0.0] * self.VECTOR_SIZE
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Return embedding cache statistics."""
+        return {
+            "cache_size": len(self.embedding_cache),
+            "cache_max_size": self._embedding_cache_max_size,
+            "cache_utilization_pct": round(
+                len(self.embedding_cache) / max(self._embedding_cache_max_size, 1) * 100, 1
+            ),
+        }
 
     async def ingest_documents(
         self,
@@ -258,7 +287,7 @@ class QdrantManager:
         except ResponseHandlingException:
             return []
         except Exception as e:
-            print(f"Search error: {e}")
+            logger.error(f"Search error: {e}", operation="query")
             return []
 
         # Format results
@@ -415,7 +444,7 @@ class QdrantManager:
             )
             return True
         except Exception as e:
-            print(f"Error adding knowledge: {e}")
+            logger.error(f"Error adding knowledge: {e}", operation="add_knowledge")
             return False
 
     async def get_knowledge_docs(self) -> List[Dict]:
@@ -443,7 +472,7 @@ class QdrantManager:
                 )
             return docs
         except Exception as e:
-            print(f"Error getting knowledge docs: {e}")
+            logger.error(f"Error getting knowledge docs: {e}", operation="get_knowledge_docs")
             return []
 
     async def clear_knowledge_base(self) -> bool:
@@ -457,7 +486,7 @@ class QdrantManager:
             )
             return True
         except Exception as e:
-            print(f"Error clearing knowledge base: {e}")
+            logger.error(f"Error clearing knowledge base: {e}", operation="clear_knowledge_base")
             return False
 
     async def get_stats(self, collection_name: str = None) -> Dict:
@@ -509,7 +538,7 @@ class QdrantManager:
             )
             return True
         except Exception as e:
-            print(f"Error storing architect memory: {e}")
+            logger.error(f"Error storing architect memory: {e}", operation="store_architect_memory")
             return False
 
     async def get_architect_memory(
@@ -551,7 +580,7 @@ class QdrantManager:
                 )
             return memories
         except Exception as e:
-            print(f"Error getting architect memory: {e}")
+            logger.error(f"Error getting architect memory: {e}", operation="get_architect_memory")
             return []
 
     async def get_architect_stats(self) -> Dict:
@@ -610,7 +639,7 @@ class QdrantManager:
             self.client.upsert(collection_name=collection, points=[point], wait=True)
             return True
         except Exception as e:
-            print(f"Error storing agent message: {e}")
+            logger.error(f"Error storing agent message: {e}", operation="store_agent_message")
             return False
 
     async def get_agent_memory(
@@ -656,7 +685,7 @@ class QdrantManager:
                 )
             return memories
         except Exception as e:
-            print(f"Error getting agent memory: {e}")
+            logger.error(f"Error getting agent memory: {e}", operation="get_agent_memory")
             return []
 
     async def get_agent_stats(self, agent_name: str) -> Dict:

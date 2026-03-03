@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AgentThought, EventLogEntry, ProgressUpdate } from '../types/websocket';
+import type { AgentTasksUpdate, AgentThought, EventLogEntry, ProgressUpdate } from '../types/websocket';
 
 interface UseWebSocketOptions {
   onProgress: (update: ProgressUpdate) => void;
   onAgentThought: (thought: AgentThought) => void;
   onEventLog: (entry: EventLogEntry) => void;
+  onAgentTasks: (update: AgentTasksUpdate) => void;
   onComplete: (deliverables: unknown) => void;
   onError: (error: Error) => void;
 }
@@ -74,6 +75,15 @@ export function useWebSocket(options: UseWebSocketOptions) {
             agent: message.agent,
             message: message.message,
             metadata: message.metadata
+          });
+          break;
+
+        case 'agent_tasks':
+          options.onAgentTasks({
+            agentId: message.agent_id,
+            agentName: message.agent_name,
+            tasks: message.tasks || [],
+            overallStatus: message.overall_status || 'idle'
           });
           break;
 

@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: Optional[str] = Field(
         None, description="Tavily API key alternative"
     )
+    GITHUB_TOKEN: Optional[str] = Field(
+        None, description="GitHub Personal Access Token for repo operations"
+    )
+    BROWSER_USE_API_KEY: Optional[str] = Field(
+        None, description="Browser Use Cloud API key for web automation"
+    )
+    BROWSER_USE_ENABLED: bool = Field(
+        False, description="Enable Browser Use Cloud integration for web research"
+    )
 
     # Google Cloud
     GOOGLE_CLOUD_PROJECT: Optional[str] = Field(
@@ -106,6 +115,15 @@ class Settings(BaseSettings):
     )
     MLX_MEMORY_LIMIT_MB: int = Field(4096, description="MLX memory limit in MB")
     ENABLE_DEEP_RESEARCH: bool = Field(False, description="Enable deep research stage")
+
+    # Logging
+    LOG_DIR: str = Field("./logs", description="Directory for structured debug logs")
+    LOG_LEVEL: str = Field("DEBUG", description="Logging level (DEBUG, INFO, WARNING, ERROR)")
+
+    # Memory Management
+    EMBEDDING_CACHE_MAX_SIZE: int = Field(1000, description="Max entries in embedding LRU cache")
+    AGENT_CONVERSATION_HISTORY_LIMIT: int = Field(50, description="Max messages per agent conversation")
+    DEBATE_HISTORY_LIMIT: int = Field(20, description="Max debate rounds to keep in memory")
 
     # Local LLM (LM Studio / Ollama)
     LOCAL_LLM_ENABLED: bool = Field(True, description="Enable local LLM fallback")

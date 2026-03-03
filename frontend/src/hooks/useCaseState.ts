@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { CaseDeliverables, CaseState } from '../types/case';
 import { CaseStatus } from '../types/case';
-import type { AgentThought, EventLogEntry, ProgressUpdate } from '../types/websocket';
+import type { AgentThought, AgentTasksUpdate, EventLogEntry, ProgressUpdate } from '../types/websocket';
 
 const INITIAL_STATE: CaseState = {
   caseId: null,
@@ -10,10 +10,13 @@ const INITIAL_STATE: CaseState = {
   stage: 'Idle',
   currentAgent: null,
   agents: [
+    { id: 'coordinator', name: 'Coordinator Alpha', status: 'idle', state: 'idle', confidence: 1.0 },
     { id: 'context_weaver', name: 'Context Weaver', status: 'idle', state: 'idle', confidence: 1.0 },
     { id: 'outcome_architect', name: 'Outcome Architect', status: 'idle', state: 'idle', confidence: 1.0 },
+    { id: 'echo_vault', name: 'Echo Vault', status: 'idle', state: 'idle', confidence: 1.0 },
     { id: 'chronicle_scribe', name: 'Chronicle Scribe', status: 'idle', state: 'idle', confidence: 1.0 },
-    { id: 'pulse_monitor', name: 'Pulse Monitor', status: 'idle', state: 'idle', confidence: 1.0 }
+    { id: 'pulse_monitor', name: 'Pulse Monitor', status: 'idle', state: 'idle', confidence: 1.0 },
+    { id: 'dispute_skeptic', name: 'Dispute Skeptic', status: 'idle', state: 'idle', confidence: 1.0 }
   ],
   connections: [],
   eventLog: [],
@@ -63,6 +66,22 @@ export function useCaseState() {
     }));
   }, []);
 
+  const updateAgentTasks = useCallback((update: AgentTasksUpdate) => {
+    setCaseState(prev => ({
+      ...prev,
+      agents: prev.agents.map(a =>
+        a.id === update.agentId ? {
+          ...a,
+          tasks: update.tasks,
+          overallTaskStatus: update.overallStatus,
+          status: update.overallStatus === 'working' ? 'thinking' :
+                  update.overallStatus === 'done' ? 'complete' :
+                  update.overallStatus === 'error' ? 'active' : a.status,
+        } : a
+      )
+    }));
+  }, []);
+
   const setDeliverables = useCallback((deliverables: unknown) => {
     setCaseState(prev => ({
       ...prev,
@@ -82,6 +101,7 @@ export function useCaseState() {
     updateProgress,
     addAgentThought,
     addEventLog,
+    updateAgentTasks,
     setDeliverables,
     resetCase
   };

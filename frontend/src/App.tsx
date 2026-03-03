@@ -26,6 +26,7 @@ function App() {
     updateProgress,
     addAgentThought,
     addEventLog,
+    updateAgentTasks,
     setDeliverables,
     resetCase
   } = useCaseState();
@@ -39,6 +40,7 @@ function App() {
     onProgress: updateProgress,
     onAgentThought: addAgentThought,
     onEventLog: addEventLog,
+    onAgentTasks: updateAgentTasks,
     onComplete: setDeliverables,
     onError: (err: Error) => addEventLog({
       id: Date.now().toString(),

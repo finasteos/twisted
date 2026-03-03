@@ -38,6 +38,8 @@ from backend.tools.custom_toolkit import TWISTEDToolRegistry, TWISTEDTools
 from backend.utils.resource_guardian import M4ResourceGuardian
 from backend.memory.qdrant_store import QdrantManager
 from backend.enrichment.web_search import WebSearcher
+from backend.enrichment.browser_use_client import BrowserUseClient
+from backend.logging_config import get_logger
 from backend.models.case import Case, CaseStatus
 from backend.models.websocket import (
     AgentThoughtMessage,
@@ -53,6 +55,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("twisted")
+twisted_logger = get_logger("main")
 
 
 class ConnectionManager:
@@ -1353,17 +1356,29 @@ async def audio_websocket(websocket: WebSocket, case_id: str):
 async def process_case_pipeline(
     case_id: str, file_paths: List[str], deep_research_override: Optional[bool] = None
 ):
-    """
-    Main processing pipeline. Triggered after file upload.
-    """
+    """Main processing pipeline. Triggered after file upload."""
+
+    pipeline_start = time.time()
+    twisted_logger.pipeline_stage(case_id, "pipeline", 0, "Starting pipeline")
+
     try:
-        # STAGE 1: Ingestion (10%)
+        # STAGE 1: Ingestion (0-10%)
+        twisted_logger.pipeline_stage(case_id, "ingestion", 0, "Starting file ingestion")
+        ingestion_start = twisted_logger.agent_start(
+            "Coordinator",
+            case_id,
+            "ingestion",
+            {"file_count": len(file_paths)},
+        )
+
         await connection_manager.broadcast_progress(
             case_id, "ingestion", 0, "Starting file ingestion..."
         )
 
         if not ingestion_pipeline:
-            logger.error("Ingestion pipeline not initialized")
+            err = "Ingestion pipeline not initialized"
+            logger.error(err)
+            twisted_logger.error(err, agent="pipeline", case_id=case_id, operation="ingestion")
             await connection_manager.broadcast_progress(
                 case_id, "ingestion", 0, "Error: System not ready"
             )
@@ -1380,14 +1395,30 @@ async def process_case_pipeline(
             ),
         )
 
+        document_count = len(ingestion_result.get("documents", []))
         await connection_manager.broadcast_progress(
             case_id,
             "ingestion",
             10,
-            f"Ingested {len(ingestion_result['documents'])} documents",
+            f"Ingested {document_count} documents",
+        )
+        twisted_logger.agent_complete(
+            "Coordinator",
+            case_id,
+            "ingestion",
+            ingestion_start,
+            {"document_count": document_count},
         )
 
         # STAGE 2: Context Analysis (10-40%)
+        twisted_logger.pipeline_stage(case_id, "analysis", 10, "Starting context analysis")
+        ctx_start = twisted_logger.agent_start(
+            "Context Weaver",
+            case_id,
+            "context_analysis",
+            {"summary_preview": str(ingestion_result.get("summary", ""))[:200]},
+        )
+
         await connection_manager.broadcast_event_log(
             case_id,
             "INFO",
@@ -1408,9 +1439,18 @@ async def process_case_pipeline(
                     connection_manager.broadcast_agent_thought(case_id, **kwargs)
                 ),
             )
+            twisted_logger.agent_complete(
+                "Context Weaver", case_id, "context_analysis", ctx_start
+            )
         else:
-            logger.error(
-                f"Swarm orchestrator not initialized for case {case_id}. Skipping context analysis."
+            err = f"Swarm orchestrator not initialized for case {case_id}. Skipping context analysis."
+            logger.error(err)
+            twisted_logger.agent_error(
+                "Context Weaver",
+                case_id,
+                "context_analysis",
+                Exception("swarm_orchestrator_not_initialized"),
+                {"message": err},
             )
             await connection_manager.broadcast_event_log(
                 case_id,
@@ -1424,29 +1464,28 @@ async def process_case_pipeline(
         enable_deep = (
             deep_research_override
             if deep_research_override is not None
-            else (
-                settings.ENABLE_DEEP_RESEARCH
-                if hasattr(settings, "ENABLE_DEEP_RESEARCH")
-                else False
-            )
+            else settings.ENABLE_DEEP_RESEARCH
         )
 
         if enable_deep:
+            twisted_logger.pipeline_stage(case_id, "deep_research", 40, "Starting deep research")
+            research_start = twisted_logger.agent_start(
+                "Coordinator",
+                case_id,
+                "deep_research",
+                {"browser_use_enabled": bool(settings.BROWSER_USE_ENABLED)},
+            )
+
             await connection_manager.broadcast_progress(
                 case_id, "research", 40, "Initiating deep research phase..."
             )
-            # Placeholder for research agent
-            await asyncio.sleep(2)
-            await connection_manager.broadcast_progress(
-                case_id, "research", 50, "Deep research complete"
-            )
+
             from backend.enrichment.deep_research import DeepResearchOrchestrator
 
             research = DeepResearchOrchestrator(gemini_wrapper)
-
             findings = await research.execute(
                 case_id=case_id,
-                context_query=ingestion_result["summary"],
+                context_query=str(ingestion_result.get("summary", "")),
                 progress_callback=lambda p, m: connection_manager.broadcast_progress(
                     case_id,
                     "deep_research",
@@ -1455,25 +1494,73 @@ async def process_case_pipeline(
                 ),
             )
 
-            await qdrant_manager.store_external_intel(case_id, findings)
+            # Optional Browser Use Cloud augmentation
+            if settings.BROWSER_USE_ENABLED and settings.BROWSER_USE_API_KEY:
+                try:
+                    browser_client = BrowserUseClient(api_key=settings.BROWSER_USE_API_KEY)
+                    browser_result = await browser_client.run_research(
+                        query=str(ingestion_result.get("summary", ""))
+                    )
+                    await browser_client.close()
+
+                    findings.setdefault("documents", []).append(
+                        json.dumps(browser_result, default=str)
+                    )
+                    findings.setdefault("metadatas", []).append(
+                        {"type": "browser_use", "source": "browser_use"}
+                    )
+                except Exception as e:
+                    twisted_logger.warning(
+                        f"Browser Use research failed: {e}",
+                        agent="BrowserUse",
+                        case_id=case_id,
+                        operation="deep_research",
+                    )
+
+            if qdrant_manager:
+                await qdrant_manager.store_external_intel(case_id, findings)
+
+            await connection_manager.broadcast_progress(
+                case_id, "research", 50, "Deep research complete"
+            )
+
+            twisted_logger.agent_complete(
+                "Coordinator",
+                case_id,
+                "deep_research",
+                research_start,
+                {"external_doc_count": len(findings.get("documents", []))},
+            )
 
         # STAGE 4: Swarm Debate (50-90%)
+        twisted_logger.pipeline_stage(case_id, "debate", 50, "Starting swarm debate")
+        debate_start = twisted_logger.agent_start(
+            "Swarm", case_id, "debate", {"rounds": 3}
+        )
+
         await connection_manager.broadcast_event_log(
             case_id,
             "INFO",
             "Coordinator",
             "Initiating multi-agent debate for outcome optimization",
         )
+
         if not swarm_orchestrator:
-            logger.error(
-                f"Swarm orchestrator not initialized for case {case_id}. Skipping debate."
+            err = f"Swarm orchestrator not initialized for case {case_id}. Skipping debate."
+            logger.error(err)
+            twisted_logger.agent_error(
+                "Swarm",
+                case_id,
+                "debate",
+                Exception("swarm_orchestrator_not_initialized"),
+                {"message": err},
             )
             await connection_manager.broadcast_progress(
                 case_id, "debate", 50, "Error: System not ready for debate"
             )
-            # Optionally, raise an exception or handle this state appropriately
-            # For now, we'll just skip and proceed to the next stage if possible
-            final_outcome = {"error": "Swarm orchestrator not available for debate"}
+            final_outcome: Dict[str, Any] = {
+                "error": "Swarm orchestrator not available for debate"
+            }
         else:
             final_outcome = await swarm_orchestrator.run_debate(
                 case_id=case_id,
@@ -1492,13 +1579,28 @@ async def process_case_pipeline(
                 ),
             )
 
+        twisted_logger.agent_complete(
+            "Swarm",
+            case_id,
+            "debate",
+            debate_start,
+            {"outcome_keys": list(final_outcome.keys())},
+        )
+
         # STAGE 5: Deliverable Generation (90-100%)
+        twisted_logger.pipeline_stage(case_id, "synthesis", 90, "Generating deliverables")
+        deliverables_start = twisted_logger.agent_start(
+            "Chronicle Scribe", case_id, "deliverables"
+        )
+
         await connection_manager.broadcast_progress(
             case_id, "synthesis", 90, "Generating final deliverables..."
         )
 
         if not swarm_orchestrator:
-            logger.error("Swarm orchestrator not initialized")
+            err = "Swarm orchestrator not initialized"
+            logger.error(err)
+            twisted_logger.error(err, agent="pipeline", case_id=case_id, operation="synthesis")
             await connection_manager.broadcast_progress(
                 case_id, "synthesis", 100, "Error: System not ready"
             )
@@ -1513,6 +1615,26 @@ async def process_case_pipeline(
                 90 + (p * 0.1),
                 m,  # 90-100%
             ),
+        )
+
+        twisted_logger.agent_complete(
+            "Chronicle Scribe",
+            case_id,
+            "deliverables",
+            deliverables_start,
+            {
+                "deliverable_keys": list(deliverables.keys())
+                if isinstance(deliverables, dict)
+                else None
+            },
+        )
+
+        pipeline_duration = time.time() - pipeline_start
+        twisted_logger.pipeline_stage(
+            case_id,
+            "pipeline",
+            100,
+            f"Pipeline finished in {pipeline_duration:.1f}s",
         )
 
         # Complete
@@ -1535,6 +1657,14 @@ async def process_case_pipeline(
 
     except Exception as e:
         logger.exception(f"Pipeline failed for case {case_id}")
+        twisted_logger.error(
+            f"Pipeline failed for case {case_id}: {str(e)}",
+            agent="pipeline",
+            case_id=case_id,
+            operation="pipeline",
+            step="error",
+            error=str(e),
+        )
         await connection_manager.broadcast_event_log(
             case_id,
             "ERROR",
