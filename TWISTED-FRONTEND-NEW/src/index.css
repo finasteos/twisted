@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-ui-bg: hsl(var(--ui-hue), var(--ui-sat), var(--ui-lit-light));
+  --color-ui-bg-dark: hsl(var(--ui-hue), var(--ui-sat), var(--ui-lit-dark));
+  --color-ui-text: hsl(var(--ui-hue), var(--ui-sat), 7%);
+  --color-ui-text-dark: hsl(var(--ui-hue), var(--ui-sat), 93%);
+  --color-ui-border: hsl(var(--ui-hue), var(--ui-sat), 7%);
+  --color-ui-border-dark: hsl(var(--ui-hue), var(--ui-sat), 93%);
+  --color-ui-card: hsl(var(--ui-hue), var(--ui-sat), 100%);
+  --color-ui-card-dark: hsl(var(--ui-hue), var(--ui-sat), 4%);
+}
+
+:root {
+  --ui-hue: 0;
+  --ui-sat: 0%;
+  --ui-lit-dark: 7%;
+  --ui-lit-light: 93%;
+  --ui-accent-hue: 152;
+  --ui-accent-sat: 100%;
+  --ui-accent-lit: 50%;
+}
+
+/* Default to dark mode */
+body {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), var(--ui-lit-dark));
+  color: hsl(var(--ui-hue), var(--ui-sat), 93%);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode */
+body.light {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), var(--ui-lit-light));
+  color: hsl(var(--ui-hue), var(--ui-sat), 7%);
+}
+
+/* Brutalist / Grayscale styling */
+.brutalist-card {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 100%);
+  border: 3px solid hsl(var(--ui-hue), var(--ui-sat), 7%);
+  box-shadow: 8px 8px 0px 0px hsl(var(--ui-hue), var(--ui-sat), 7%);
+  transition: all 0.2s ease;
+}
+
+.dark .brutalist-card {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 4%);
+  border-color: hsl(var(--ui-hue), var(--ui-sat), 93%);
+  box-shadow: 8px 8px 0px 0px hsl(var(--ui-hue), var(--ui-sat), 93%);
+}
+
+.brutalist-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 10px 10px 0px 0px hsl(var(--ui-hue), var(--ui-sat), 7%);
+}
+
+.dark .brutalist-card:hover {
+  box-shadow: 10px 10px 0px 0px hsl(var(--ui-hue), var(--ui-sat), 93%);
+}
+
+.brutalist-button {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 7%);
+  color: hsl(var(--ui-hue), var(--ui-sat), 100%);
+  border: 2px solid hsl(var(--ui-hue), var(--ui-sat), 7%);
+  font-weight: bold;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.dark .brutalist-button {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 93%);
+  color: hsl(var(--ui-hue), var(--ui-sat), 7%);
+  border-color: hsl(var(--ui-hue), var(--ui-sat), 93%);
+}
+
+.brutalist-button:hover {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 100%);
+  color: hsl(var(--ui-hue), var(--ui-sat), 7%);
+}
+
+.dark .brutalist-button:hover {
+  background-color: hsl(var(--ui-hue), var(--ui-sat), 4%);
+  color: hsl(var(--ui-hue), var(--ui-sat), 93%);
+}
+
+.brutalist-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* React Flow Overrides */
+.react-flow__node {
+  border-radius: 0 !important;
+}
+
+.react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  background-color: #111 !important;
+  border: 2px solid #fff !important;
+  border-radius: 0 !important;
+}
+
+.dark .react-flow__handle {
+  background-color: #eee !important;
+  border-color: #000 !important;
+}
+
+.react-flow__controls {
+  box-shadow: 4px 4px 0px 0px #111 !important;
+  border: 2px solid #111 !important;
+  border-radius: 0 !important;
+  overflow: hidden;
+}
+
+.dark .react-flow__controls {
+  box-shadow: 4px 4px 0px 0px #eee !important;
+  border-color: #eee !important;
+}
+
+.react-flow__controls-button {
+  border-bottom: 2px solid #111 !important;
+  border-radius: 0 !important;
+  color: #111 !important;
+  background: #fff !important;
+}
+
+.dark .react-flow__controls-button {
+  border-bottom-color: #eee !important;
+  color: #eee !important;
+  background: #0a0a0a !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background: #eee !important;
+}
+
+.dark .react-flow__controls-button:hover {
+  background: #222 !important;
+}
+
+/* Dark mode specific overrides for inline styles */
+.dark .bg-\[\#f4f4f0\] {
+  background-color: #1a1a1a !important;
+}
+.dark .border-\[\#111\] {
+  border-color: #eee !important;
+}
+.dark .text-\[\#111\] {
+  color: #eee !important;
+}
+.dark .bg-\[\#111\] {
+  background-color: #eee !important;
+}
+.dark .text-white {
+  color: #111 !important;
+}
+.dark .bg-white {
+  background-color: #0a0a0a !important;
+}
+
+/* Custom Scrollbar for Agent Chat */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

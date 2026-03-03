@@ -1,0 +1,238 @@
+/*
+ * TWISTED Glassmorphism Physics
+ *
+ * Principles:
+ * - Light behaves like it passes through translucent material
+ * - Depth is created via layered blur and parallax
+ * - Motion conveys state without words
+ * - Glow indicates interactivity and importance
+ */
+
+:root {
+  /* Refractive indices for layering */
+  --layer-backdrop: blur(40px) saturate(180%);
+  --layer-mid: blur(20px) saturate(150%);
+  --layer-front: blur(10px) saturate(120%);
+
+  /* Light propagation */
+  --glow-phosphor: 0 0 20px rgba(0, 255, 136, 0.3);
+  --glow-amber: 0 0 20px rgba(245, 158, 11, 0.3);
+  --glow-critical: 0 0 30px rgba(239, 68, 68, 0.4);
+
+  /* Thermal visualization (M4 health) */
+  --thermal-cool: rgba(0, 255, 136, 0.1);
+  --thermal-warm: rgba(245, 158, 11, 0.15);
+  --thermal-hot: rgba(239, 68, 68, 0.2);
+}
+
+/* The Glass Card — Base Component */
+.glass-card {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  backdrop-filter: var(--layer-mid);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+
+  /* Inner glow for depth */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Pseudo-element for edge highlight using a more standard approach */
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent 50%, rgba(255,255,255,0.05)) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Thermal State Visualization */
+.glass-card.thermal-cool {
+  border-color: rgba(0, 255, 136, 0.2);
+  background: linear-gradient(
+    135deg,
+    var(--thermal-cool) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+}
+
+.glass-card.thermal-warm {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(
+    135deg,
+    var(--thermal-warm) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  animation: thermal-pulse 3s ease-in-out infinite;
+}
+
+.glass-card.thermal-hot {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(
+    135deg,
+    var(--thermal-hot) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  animation: thermal-pulse 1s ease-in-out infinite;
+}
+
+@keyframes thermal-pulse {
+  0%, 100% { box-shadow: 0 0 10px currentColor; }
+  50% { box-shadow: 0 0 25px currentColor; }
+}
+
+/* Agent Node — React Flow Custom Styling */
+.agent-node {
+  width: 180px;
+  padding: 12px;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.agent-node[data-state="idle"] {
+  opacity: 0.6;
+  transform: scale(0.95);
+}
+
+.agent-node[data-state="querying"] {
+  animation: querying-pulse 1.5s ease-in-out infinite;
+  border-color: #3b82f6;
+}
+
+.agent-node[data-state="reasoning"] {
+  animation: reasoning-glow 2s ease-in-out infinite;
+  border-color: #a855f7;
+}
+
+.agent-node[data-state="debating"] {
+  animation: debate-flicker 0.8s ease-in-out infinite;
+  border-color: #f59e0b;
+  box-shadow: var(--glow-amber);
+}
+
+.agent-node[data-state="active"] {
+  transform: scale(1.05);
+  border-color: #00ff88;
+  box-shadow: var(--glow-phosphor);
+}
+
+@keyframes querying-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes reasoning-glow {
+  0%, 100% { box-shadow: 0 0 5px #a855f7; }
+  50% { box-shadow: 0 0 20px #a855f7, 0 0 40px #a855f7; }
+}
+
+@keyframes debate-flicker {
+  0%, 100% { opacity: 1; }
+  25% { opacity: 0.8; }
+  50% { opacity: 1; }
+  75% { opacity: 0.9; }
+}
+
+/* Data Flow Edges — Animated SVG Paths */
+.react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 2;
+  transition: all 0.3s ease;
+}
+
+.react-flow__edge-path.active {
+  stroke: #00ff88;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 8px #00ff88);
+  animation: data-flow 1s linear infinite;
+  stroke-dasharray: 10, 5;
+  stroke-dashoffset: 0;
+}
+
+@keyframes data-flow {
+  to {
+    stroke-dashoffset: -15;
+  }
+}
+
+/* Event Log — Scrolling Typography */
+.log-entry {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0;
+  animation: log-appear 0.3s ease forwards;
+}
+
+@keyframes log-appear {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Confidence Indicator — Liquid Fill */
+.confidence-meter {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(
+    90deg,
+    #ef4444 0%,
+    #f59e0b 50%,
+    #00ff88 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* Aurora Background */
+.aurora-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: #000;
+}
+
+.aurora-layer .blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.3;
+  mix-blend-mode: screen;
+  animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(10%, 10%) scale(1.1); }
+  66% { transform: translate(-10%, 5%) scale(0.9); }
+}

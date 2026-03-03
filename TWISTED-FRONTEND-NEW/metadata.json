@@ -1,0 +1,8 @@
+{
+  "name": "Remix: TWISTED",
+  "description": "Liquid clarity for complex problems. A cognitive exoskeleton for humans navigating high-stakes complexity.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -1,0 +1,20 @@
+# INTERNAL MEMO - CONFIDENTIAL
+# ALFA CORP ACQUISITION DEBATE
+# DATE: OCT 14, 2026
+
+DOCUMENT 1: Email from Sarah Jenkins (CTO) to Board of Directors
+"I strongly oppose the acquisition of OmegaTech. Their IP portfolio is completely outdated, and integrating their legacy systems into our modern stack will cost at least $4.5M over two years. Furthermore, I have heard from unofficial channels that their lead architect, David Chen, is planning to resign immediately after the buyout. Without him, their codebase is a black box. Do not proceed."
+
+DOCUMENT 2: Transcript of voicemail from David Chen (OmegaTech Lead Architect) to Marcus Reed (CEO of Alfa Corp)
+"Hi Marcus, it's David. Just calling to say I'm really excited about the merger. I've been reviewing your Alpha Core architecture and I see a perfect synergy with our new quantum-encryption module—which, by the way, Sarah doesn't even know about yet because we kept it out of the initial due diligence pack for security reasons. Can't wait to lead the integration team next month."
+
+DOCUMENT 3: Slack messages between Sarah Jenkins (CTO) and external recruiter
+[10:02 AM] Sarah: Did you get the offer from Beta Industries?
+[10:05 AM] Recruiter: Yes, they are offering 30% above your current base, but it's contingent on you bringing the OmegaTech quantum-encryption module design with you, if Alfa acquires them.
+[10:08 AM] Sarah: I'm trying to block the Alfa-Omega deal altogether. If Beta buys Omega instead, I become Beta's CTO. I'm telling the Alfa board that Omega's tech is useless.
+
+DOCUMENT 4: Financial Audit - OmegaTech (Summary)
+"OmegaTech has sustained a net loss of $1.2M this quarter. However, their undisclosed 'Project Q' (quantum encryption) has been independently valued at $15M if successfully brought to market. Their infrastructure is indeed legacy (10+ years old), validating concerns about high integration costs."
+
+DOCUMENT 5: HR Report - Sarah Jenkins
+"Sarah has been an exemplary CTO for 4 years, consistently delivering projects under budget. However, she has recently requested extended leave and exhibited signs of burnout."

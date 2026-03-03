@@ -1,0 +1,35 @@
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pulse-indicator {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-phosphor-dim);
+  animation: pulse 2s infinite;
+  margin: 0 auto 1rem;
+}
+
+.processing-placeholder, .upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+.progress-detail {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
