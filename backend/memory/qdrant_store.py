@@ -47,6 +47,7 @@ class QdrantManager:
         api_key: str,
         collection_name: str = "twisted_cases",
         embedding_model: str = "text-embedding-004",
+        gemini_wrapper=None,
     ):
         self.url = url
         self.api_key = api_key
@@ -54,6 +55,7 @@ class QdrantManager:
         self.embedding_model = embedding_model
         self.client: Optional[QdrantClient] = None
         self.embedding_cache: Dict[str, List[float]] = {}
+        self._gemini_wrapper = gemini_wrapper
 
     async def initialize(self):
         """Initialize Qdrant client and ensure collections exist."""
@@ -127,26 +129,22 @@ class QdrantManager:
         hash_input = f"{case_id}:{content}:{index}"
         return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+    def set_gemini_wrapper(self, wrapper):
+        """Inject the GeminiWrapper after construction (avoids circular imports)."""
+        self._gemini_wrapper = wrapper
+
     async def _get_embedding(self, text: str) -> List[float]:
-        """Get embedding for text using Gemini."""
+        """Get embedding for text using the injected GeminiWrapper."""
         if text in self.embedding_cache:
             return self.embedding_cache[text]
 
-        # Import here to avoid issues if not installed
-        from backend.llm.wrapper import GeminiWrapper
-
-        # Get a temporary wrapper to generate embeddings
-        # In production, you'd want to pass this in
-        try:
-            # Try to use the global gemini_wrapper if available
-            from backend.main import gemini_wrapper
-
-            if gemini_wrapper:
-                embedding = await gemini_wrapper.get_embedding(text)
+        if self._gemini_wrapper:
+            try:
+                embedding = await self._gemini_wrapper.get_embedding(text)
                 self.embedding_cache[text] = embedding
                 return embedding
-        except:
-            pass
+            except Exception as e:
+                print(f"Warning: Embedding failed: {e}")
 
         # Fallback: return a zero vector (not ideal but prevents crashes)
         print(f"Warning: No embedding available for text, using zero vector")

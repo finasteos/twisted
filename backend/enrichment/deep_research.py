@@ -100,22 +100,17 @@ Output JSON array of query strings."""
         Execute parallel web searches via SerpAPI/Tavily.
         Respects rate limits (10 queries/minute).
         """
-        from enrichment.web_search import SerpAPIClient, TavilyClient
+        from backend.enrichment.web_search import WebSearcher
 
-        serp = SerpAPIClient()
-        tavily = TavilyClient()
+        searcher = WebSearcher()
 
         results = []
-        semaphore = asyncio.Semaphore(2)  # Limit concurrent searches
+        # Run searches sequentially to respect 10 queries/minute
+        semaphore = asyncio.Semaphore(1)
 
         async def search_with_limit(query: str):
             async with semaphore:
-                # Alternate between sources for diversity
-                if len(results) % 2 == 0:
-                    result = await serp.search(query)
-                else:
-                    result = await tavily.search(query)
-
+                result = await searcher.search(query)
                 # Rate limit: 6 seconds between calls (10/min)
                 await asyncio.sleep(6)
                 return result
@@ -179,10 +174,20 @@ Be thorough. This is background intelligence for a high-stakes decision."""
             }
         )
 
+        synthesis_text = getattr(response, "text", None) or getattr(response, "content", None) or str(response)
+        raw_response = getattr(response, "raw", response)
+
+        thinking = None
+        try:
+            first_part = raw_response.candidates[0].content.parts[0]
+            thinking = getattr(first_part, "thought", None)
+        except Exception:
+            thinking = None
+
         return {
-            'synthesis': response.text,
-            'thinking_process': response.candidates[0].content.parts[0].thought if hasattr(response.candidates[0].content.parts[0], 'thought') else None,
-            'sources': [r['query'] for r in search_results]
+            "synthesis": synthesis_text,
+            "thinking_process": thinking,
+            "sources": [r["query"] for r in search_results],
         }
 
     def _compile_research_context(self, search_results: List[Dict]) -> str:

@@ -225,6 +225,9 @@ async def lifespan(app: FastAPI):
     await gemini_wrapper.initialize()
     logger.info("✅ Gemini wrapper initialized")
 
+    # Inject gemini_wrapper into qdrant_manager (avoids circular import)
+    qdrant_manager.set_gemini_wrapper(gemini_wrapper)
+
     # Initialize Local LLM (LM Studio)
     from backend.llm.local_llm import LocalLLMClient
 
@@ -357,11 +360,11 @@ async def system_health():
     else:
         health["apis"]["search"] = {"status": "error", "message": "Not initialized"}
 
-    # 4. Vector Store Health (ChromaDB)
+    # 4. Vector Store Health (Qdrant)
     if qdrant_manager:
-        health["apis"]["chromadb"] = await qdrant_manager.check_health()
+        health["apis"]["qdrant"] = await qdrant_manager.check_health()
     else:
-        health["apis"]["chromadb"] = {"status": "error", "message": "Not initialized"}
+        health["apis"]["qdrant"] = {"status": "error", "message": "Not initialized"}
 
     return health
 
@@ -453,94 +456,55 @@ async def get_available_models():
 
 @app.get("/api/gemini/test")
 async def test_gemini():
-    """Direct test of Gemini API using httpx"""
-    import httpx
+    """Test Gemini connectivity via the shared GeminiWrapper."""
+
+    if not gemini_wrapper:
+        return {"error": "Gemini wrapper not initialized", "status": "error"}
 
     try:
-        key = settings.GEMINI_API_KEY
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key={key}"
-
-        data = {
-            "contents": [{"parts": [{"text": "Say hi in 3 words"}]}],
-            "generationConfig": {"temperature": 0.7},
-        }
-
-        resp = httpx.post(url, json=data, timeout=30)
-        if resp.status_code == 200:
-            result = resp.json()
-            text = (
-                result.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-            )
-            return {"response": text, "status": "ok"}
-        else:
-            return {"error": resp.text, "status": "error", "code": resp.status_code}
+        resp = await gemini_wrapper.generate(
+            prompt="Say hi in 3 words",
+            model="gemini-3.1-pro-preview",
+            temperature=0.7,
+            task_complexity="analysis",
+        )
+        text = getattr(resp, "text", None) or getattr(resp, "content", None) or ""
+        return {"response": text, "status": "ok"}
     except Exception as e:
         return {"error": str(e), "status": "error"}
 
 
 @app.post("/api/quick/chat")
 async def quick_chat(request: Dict):
-    """Quick chat using httpx directly with retry and fallback"""
-    import httpx
-    import asyncio
+    """Quick chat using the shared GeminiWrapper (with local fallback)."""
 
     message = request.get("message", "")
-    key = settings.GEMINI_API_KEY
 
-    models_to_try = ["gemini-3.1-pro-preview", "gemini-2.5-flash", "gemini-2.0-flash"]
+    if not gemini_wrapper:
+        return {"error": "Gemini wrapper not initialized", "source": "failed"}
 
-    for model in models_to_try:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    try:
+        resp = await gemini_wrapper.generate(
+            prompt=message,
+            task_complexity="analysis",
+            temperature=0.7,
+        )
+        text = getattr(resp, "text", None) or getattr(resp, "content", None) or ""
+        return {"response": text, "source": "gemini_wrapper"}
+    except Exception as e:
+        logger.warning(f"Quick chat Gemini failed: {e}")
 
-            data = {
-                "contents": [{"parts": [{"text": message}]}],
-                "generationConfig": {"temperature": 0.7},
-            }
-
-            resp = httpx.post(url, json=data, timeout=30)
-
-            if resp.status_code == 200:
-                result = resp.json()
-                text = (
-                    result.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "")
-                )
-                return {"response": text, "source": model}
-            elif resp.status_code == 503:
-                continue  # Try next model
-            else:
-                error_data = resp.json()
-                error_msg = error_data.get("error", {}).get(
-                    "message", str(resp.status_code)
-                )
-                return {"error": error_msg, "source": "error", "code": resp.status_code}
-
-        except httpx.TimeoutException:
-            continue
-        except Exception as e:
-            continue
-
-    # All Gemini models failed, try local LLM
     if local_llm_client:
         try:
             resp = await local_llm_client.generate(message)
             return {"response": resp, "source": "local_llm"}
         except Exception as llm_err:
             return {
-                "error": f"All Gemini models failed, local LLM also failed: {llm_err}",
+                "error": f"Gemini failed, local LLM also failed: {llm_err}",
                 "source": "failed",
             }
 
-    return {
-        "error": "All Gemini models failed and local LLM unavailable",
-        "source": "failed",
-    }
+    return {"error": "Gemini failed and local LLM unavailable", "source": "failed"}
 
 
 @app.get("/api/local-llm/status")
@@ -600,7 +564,7 @@ async def create_case(request: CreateCaseRequest):
     )
 
     # Persist case metadata (in production, use proper database)
-    # For now, store in ChromaDB metadata collection
+    # For now, store in Qdrant metadata collection
 
     logger.info(f"📁 Created case {case_id}: {request.user_query}")
 
@@ -669,7 +633,7 @@ async def get_deliverables(case_id: str):
     if not case or case.status != CaseStatus.COMPLETE:
         raise HTTPException(status_code=400, detail="Case not complete")
 
-    # Retrieve from ChromaDB final_deliverables collection
+    # Retrieve from Qdrant final_deliverables collection
     deliverables = await qdrant_manager.get_deliverables(case_id)
     return deliverables
 
@@ -918,10 +882,10 @@ async def architect_read_file(request: Dict):
 
     from pathlib import Path
 
-    base_path = Path(__file__).parent.parent
+    base_path = Path(__file__).parent.parent.resolve()
     full_path = (base_path / file_path).resolve()
 
-    if not str(full_path).startswith(str(base_path)):
+    if not full_path.is_relative_to(base_path):
         return {"error": "Access denied: Path outside project"}
 
     try:
@@ -941,10 +905,10 @@ async def architect_list_dir(request: Dict):
 
     from pathlib import Path
 
-    base_path = Path(__file__).parent.parent
+    base_path = Path(__file__).parent.parent.resolve()
     full_path = (base_path / dir_path).resolve()
 
-    if not str(full_path).startswith(str(base_path)):
+    if not full_path.is_relative_to(base_path):
         return {"error": "Access denied: Path outside project"}
 
     try:
@@ -1045,93 +1009,21 @@ Respond in character as {agent_name.title()}."""
             f"📤 Sending to Gemini (model=gemini-3.1-pro-preview, prompt_len={len(full_prompt)})"
         )
 
-        # Use httpx for direct API call
-        import httpx
-
         try:
-            key = settings.GEMINI_API_KEY
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key={key}"
-
-            data = {
-                "contents": [{"parts": [{"text": full_prompt}]}],
-                "generationConfig": {"temperature": 0.7},
-            }
-
-            logger.info("🔍 Calling Gemini API via httpx...")
-
-            # Retry logic with exponential backoff and model fallback
-            import asyncio
-
-            models_to_try = [
-                "gemini-3.1-pro-preview",
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-            ]
-            max_retries = 3
-            last_error = None
-
-            for model in models_to_try:
-                for attempt in range(max_retries):
-                    try:
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-
-                        if attempt > 0:
-                            wait_time = 2**attempt  # Exponential backoff: 2s, 4s
-                            logger.info(
-                                f"⏳ Retry {attempt + 1}/{max_retries} for {model}, waiting {wait_time}s..."
-                            )
-                            await asyncio.sleep(wait_time)
-
-                        logger.info(f"📡 Trying model: {model} (attempt {attempt + 1})")
-                        resp = httpx.post(url, json=data, timeout=60)
-
-                        if resp.status_code == 200:
-                            result = resp.json()
-                            response_text = (
-                                result.get("candidates", [{}])[0]
-                                .get("content", {})
-                                .get("parts", [{}])[0]
-                                .get("text", "")
-                            )
-                            response_text = (
-                                response_text or "I'm thinking... (no response)"
-                            )
-                            logger.info(
-                                f"✅ Gemini response received from {model} ({len(response_text)} chars)"
-                            )
-                            break  # Success, exit retry loop
-                        elif resp.status_code == 503:
-                            logger.warning(
-                                f"⚠️ Model {model} returned 503, trying next..."
-                            )
-                            last_error = f"503 from {model}"
-                            continue  # Try next model or retry
-                        else:
-                            logger.warning(
-                                f"⚠️ Model {model} returned {resp.status_code}"
-                            )
-                            last_error = f"{resp.status_code} from {model}"
-                            continue
-                    except httpx.TimeoutException:
-                        logger.warning(f"⏱️ Timeout on {model} attempt {attempt + 1}")
-                        last_error = f"Timeout on {model}"
-                        continue
-                    except Exception as e:
-                        logger.warning(f"❌ Error on {model}: {e}")
-                        last_error = str(e)
-                        continue
-                else:
-                    # All retries failed for this model, try next model
-                    continue
-
-                # If we broke out of inner loop (success), exit outer loop
-                break
-            else:
-                # All models failed
-                raise Exception(f"All Gemini models failed. Last error: {last_error}")
+            resp = await gemini_wrapper.generate(
+                prompt=full_prompt,
+                model="gemini-3.1-pro-preview",
+                temperature=0.7,
+                task_complexity="analysis",
+            )
+            response_text = (
+                getattr(resp, "text", None)
+                or getattr(resp, "content", None)
+                or "I'm thinking... (no response)"
+            )
         except Exception as api_error:
-            logger.error(f"❌ Gemini API error: {api_error}")
-            logger.info(f"🔄 Trying local LLM fallback...")
+            logger.error(f"❌ Gemini error: {api_error}")
+            logger.info("🔄 Trying local LLM fallback...")
             if local_llm_client:
                 try:
                     response_text = await local_llm_client.generate(full_prompt)
@@ -1570,11 +1462,6 @@ async def process_case_pipeline(
             await connection_manager.broadcast_progress(
                 case_id, "synthesis", 100, "Error: System not ready"
             )
-            return
-
-        if not swarm_orchestrator:
-            logger.error("Swarm orchestrator not initialized")
-            await send_progress(100, "Error: System not ready")
             return
 
         deliverables = await swarm_orchestrator.generate_deliverables(

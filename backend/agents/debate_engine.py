@@ -82,12 +82,9 @@ class DebateRound:
             # Fallback to dummy embeddings if LLM not available
             return [np.zeros(768) for _ in claims]
 
-        embeddings = []
-        for claim in claims:
-            # Assuming gemini_wrapper has embed method
-            emb = await self.llm.embed(claim)
-            embeddings.append(np.array(emb))
-        return embeddings
+        # GeminiWrapper.embed expects a list[str] and supports batching.
+        vectors = await self.llm.embed(claims)
+        return [np.array(v) for v in vectors]
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         norm_a = np.linalg.norm(a)

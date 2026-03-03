@@ -5,8 +5,8 @@ Agent capable of using custom tools via Gemini function calling.
 import json
 import logging
 from typing import Dict, List, Optional, Any
-from backend.agents.base_agent import BaseAgent, AgentState
-from tools.custom_toolkit import TWISTEDToolRegistry
+from backend.agents.base_agent import BaseAgent
+from backend.tools.custom_toolkit import TWISTEDToolRegistry
 from google.genai import types
 
 logger = logging.getLogger("twisted.agents.tool_user")
@@ -20,25 +20,23 @@ class ToolUsingAgent(BaseAgent):
 
     def __init__(
         self,
-        agent_id: str,
-        identity_path: str,
-        skills_path: str,
-        soul_path: str,
-        llm_client,
-        vector_store,
-        comm_manager,
-        tool_registry: TWISTEDToolRegistry,
+        agent_name: str,
+        codename: str,
+        profile_dir: str,
+        llm=None,
+        task_type: str = "tool_use",
+        tool_registry: Optional[TWISTEDToolRegistry] = None,
+        comm_manager=None,
     ):
         super().__init__(
-            agent_id,
-            identity_path,
-            skills_path,
-            soul_path,
-            llm_client,
-            vector_store,
-            comm_manager,
+            agent_name=agent_name,
+            codename=codename,
+            profile_dir=profile_dir,
+            llm=llm,
+            task_type=task_type,
         )
         self.tools = tool_registry
+        self.comm = comm_manager
         self.pending_approvals = []
 
     async def execute_task_with_tools(
@@ -47,17 +45,22 @@ class ToolUsingAgent(BaseAgent):
         """
         Execute task, potentially using tools.
         """
-        self.state = AgentState.REASONING
         logger.info(
-            f"🤖 Agent {self.agent_id} starting task with tools: {task[:50]}..."
+            f"Agent {self.codename} starting task with tools: {task[:50]}..."
         )
+
+        if not self.tools:
+            return {"error": "No tool registry configured"}
+
+        if not self.llm:
+            return {"error": "No LLM configured"}
 
         # Prepare tools for Gemini
         tool_declarations = self.tools.get_gemini_tool_declarations()
 
         # Build prompt with tools context
-        prompt = f"""You are {self.identity_data.get("name", "TWISTED Agent")}.
-{self.soul_data.get("philosophy", "")}
+        prompt = f"""You are {self.name}.
+{self.profile.system_prompt[:500] if self.profile.system_prompt else ''}
 
 Task: {task}
 
@@ -81,12 +84,6 @@ Always explain your reasoning before calling a tool."""
             # Text response
             if part.text:
                 result_parts.append({"type": "text", "content": part.text})
-                await self._emit_thought(
-                    query=task,
-                    evidence=[part.text],
-                    conclusion="Thinking...",
-                    confidence=0.5,
-                )
 
             # Tool call
             if part.function_call:
@@ -95,7 +92,7 @@ Always explain your reasoning before calling a tool."""
                 args = dict(part.function_call.args) if part.function_call.args else {}
 
                 logger.info(
-                    f"🛠️ Agent {self.agent_id} calling tool: {tool_name} with args: {args}"
+                    f"Agent {self.codename} calling tool: {tool_name} with args: {args}"
                 )
 
                 # Check if approval needed
@@ -136,7 +133,7 @@ Always explain your reasoning before calling a tool."""
                         await self.comm.broadcast_event_log(
                             case_id=case_id,
                             level="THINK",
-                            agent=self.agent_id,
+                            agent=self.codename,
                             message=f"Executed tool: {tool_name}",
                             metadata={"result_keys": list(tool_result.keys())},
                         )

@@ -3,14 +3,16 @@ Self-Improvement Agent
 Analyzes the analysis process itself to suggest improvements for future runs.
 """
 
-from typing import Dict, Any, List
-from backend.llm.wrapper import get_llm
+from typing import Dict, Any, Optional
+
+from backend.llm.wrapper import LLMWrapper
+
 
 class SelfImprovementAgent:
     """Agent that suggests improvements to the user's data quality or app configuration."""
 
-    def __init__(self):
-        self.llm = get_llm()
+    def __init__(self, llm: Optional[LLMWrapper] = None):
+        self.llm = llm
 
     async def suggest_improvements(self, context: Dict[str, Any], results: Dict[Any, Any]) -> str:
         """Analyze the results and context to suggest what was missing."""
@@ -39,9 +41,12 @@ class SelfImprovementAgent:
         Format as a Markdown list.
         """
 
+        if not self.llm:
+            return "- Configure an LLM wrapper for SelfImprovementAgent to enable suggestions."
+
         response = await self.llm.generate(
             prompt=prompt,
             system_prompt="You are an expert in AI analysis optimization.",
-            task_type="fast"
+            task_type="fast",
         )
         return response.content

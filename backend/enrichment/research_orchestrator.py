@@ -198,7 +198,7 @@ Output format: Detailed markdown with sections."""
         }
 
     def _structure_for_agents(self, synthesis: Dict, findings: List[ResearchFinding]) -> Dict:
-        """Structure research for ChromaDB inclusion."""
+        """Structure research for Qdrant vector store inclusion."""
         return {
             "documents": [synthesis["synthesis"]],
             "metadatas": [{"type": "deep_research_synthesis"}],
