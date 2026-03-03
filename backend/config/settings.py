@@ -38,11 +38,14 @@ class Settings(BaseSettings):
 
     # Gemini Configuration
     GEMINI_TIER: str = Field("tier_1", description="API tier for rate limiting")
+    RATE_LIMIT_PERCENTAGE: float = Field(
+        0.1, description="Percentage of max rate limit to use (0.1 = 10%, 0.5 = 50%)"
+    )
     RATE_LIMIT_FLASH: float = Field(
-        10.0, description="Seconds between Flash calls (10% of tier 1 max)"
+        2.0, description="Seconds between Flash calls (calculated from percentage)"
     )
     RATE_LIMIT_PRO: float = Field(
-        10.0, description="Seconds between Pro calls (10% of tier 1 max)"
+        4.0, description="Seconds between Pro calls (calculated from percentage)"
     )
     EMBEDDING_MODEL: str = Field("text-embedding-004", description="Embedding model")
 

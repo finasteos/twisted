@@ -476,35 +476,50 @@ async def test_gemini():
 
 @app.post("/api/quick/chat")
 async def quick_chat(request: Dict):
-    """Quick chat using the shared GeminiWrapper (with local fallback)."""
+    """Quick chat using the shared GeminiWrapper (with model fallback)."""
 
     message = request.get("message", "")
 
     if not gemini_wrapper:
         return {"error": "Gemini wrapper not initialized", "source": "failed"}
 
-    try:
-        resp = await gemini_wrapper.generate(
-            prompt=message,
-            task_complexity="analysis",
-            temperature=0.7,
-        )
-        text = getattr(resp, "text", None) or getattr(resp, "content", None) or ""
-        return {"response": text, "source": "gemini_wrapper"}
-    except Exception as e:
-        logger.warning(f"Quick chat Gemini failed: {e}")
+    # Model fallback chain
+    model_chain = [
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+    ]
 
+    for model in model_chain:
+        try:
+            resp = await gemini_wrapper.generate(
+                prompt=message,
+                model=model,
+                task_complexity="analysis",
+                temperature=0.7,
+            )
+            text = getattr(resp, "text", None) or getattr(resp, "content", None) or ""
+            if text:
+                return {"response": text, "source": f"gemini-{model}"}
+        except Exception as e:
+            logger.warning(f"Quick chat {model} failed: {e}")
+            continue
+
+    # All Gemini failed, try local LLM
     if local_llm_client:
         try:
             resp = await local_llm_client.generate(message)
             return {"response": resp, "source": "local_llm"}
         except Exception as llm_err:
             return {
-                "error": f"Gemini failed, local LLM also failed: {llm_err}",
+                "error": f"All Gemini models and local LLM failed: {llm_err}",
                 "source": "failed",
             }
 
-    return {"error": "Gemini failed and local LLM unavailable", "source": "failed"}
+    return {
+        "error": "All Gemini models failed and local LLM unavailable",
+        "source": "failed",
+    }
 
 
 @app.get("/api/local-llm/status")
@@ -1009,21 +1024,44 @@ Respond in character as {agent_name.title()}."""
             f"📤 Sending to Gemini (model=gemini-3.1-pro-preview, prompt_len={len(full_prompt)})"
         )
 
-        try:
-            resp = await gemini_wrapper.generate(
-                prompt=full_prompt,
-                model="gemini-3.1-pro-preview",
-                temperature=0.7,
-                task_complexity="analysis",
-            )
-            response_text = (
-                getattr(resp, "text", None)
-                or getattr(resp, "content", None)
-                or "I'm thinking... (no response)"
-            )
-        except Exception as api_error:
-            logger.error(f"❌ Gemini error: {api_error}")
-            logger.info("🔄 Trying local LLM fallback...")
+        # Model fallback chain: 3.1-pro → 3-flash → 2.5-flash → 2.0-flash
+        model_chain = [
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+        ]
+
+        response_text = None
+        last_error = None
+
+        for model in model_chain:
+            try:
+                logger.info(f"🔄 Trying model: {model}")
+                resp = await gemini_wrapper.generate(
+                    prompt=full_prompt,
+                    model=model,
+                    temperature=0.7,
+                    task_complexity="analysis",
+                )
+                response_text = (
+                    getattr(resp, "text", None)
+                    or getattr(resp, "content", None)
+                    or "I'm thinking... (no response)"
+                )
+                logger.info(f"✅ Success with model: {model}")
+                break
+            except Exception as api_error:
+                logger.warning(f"❌ {model} failed: {api_error}")
+                last_error = api_error
+                if "503" in str(api_error) or "429" in str(api_error):
+                    continue  # Try next model
+                else:
+                    break  # Other error, don't retry
+
+        # If all Gemini models failed, try local LLM
+        if not response_text and last_error:
+            logger.warning("🔄 All Gemini models failed, trying local LLM...")
             if local_llm_client:
                 try:
                     response_text = await local_llm_client.generate(full_prompt)
@@ -1032,9 +1070,11 @@ Respond in character as {agent_name.title()}."""
                     )
                 except Exception as llm_error:
                     logger.error(f"❌ Local LLM also failed: {llm_error}")
-                    raise Exception(f"Both Gemini and local LLM failed: {llm_error}")
+                    raise Exception(
+                        f"All Gemini models and local LLM failed: {llm_error}"
+                    )
             else:
-                raise api_error
+                raise last_error
 
         # Store in memory
         if qdrant_manager:
